@@ -129,10 +129,26 @@ app.get("*", (_req, res, next) => {
   });
 });
 
+// Keep a free-tier host (Render etc.) from spinning down: ping our own public
+// URL on an interval so inbound-activity idle timers never trip. Only runs when
+// a public URL is known (RENDER_EXTERNAL_URL is set automatically on Render), so
+// it does nothing in local dev. Disable with KEEP_WARM=false.
+function startKeepWarm() {
+  const base = process.env.RENDER_EXTERNAL_URL || process.env.KEEP_WARM_URL;
+  if (!base || process.env.KEEP_WARM === "false") return;
+  const url = `${base.replace(/\/$/, "")}/api/health`;
+  const INTERVAL = 10 * 60 * 1000; // 10 min < the typical ~15 min idle window
+  setInterval(() => {
+    fetch(url).catch(() => {}); // best-effort; ignore failures
+  }, INTERVAL).unref(); // don't keep the process alive solely for this timer
+  console.log(`  Keep-warm: self-pinging ${url} every 10 min`);
+}
+
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
   console.log(`\n  The Brief API → http://localhost:${PORT}`);
   console.log(
     `  Summaries: ${summariesConfigured() ? `enabled via ${summaryProvider()}` : "off (RSS snippets) — set GEMINI_API_KEY for free AI"}\n`
   );
+  startKeepWarm();
 });
