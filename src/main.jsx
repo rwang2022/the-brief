@@ -9,8 +9,9 @@ createRoot(document.getElementById("root")).render(
   </React.StrictMode>
 );
 
-// Register the service worker for "Add to Home Screen" / offline launch.
-if ("serviceWorker" in navigator) {
+// Register the service worker only in production — in dev it would cache Vite's
+// modules and serve stale code. (Add to Home Screen / offline still work in prod.)
+if (import.meta.env.PROD && "serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker.register("/sw.js").catch(() => {});
   });

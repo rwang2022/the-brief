@@ -23,7 +23,22 @@ self.addEventListener("fetch", (e) => {
     return;
   }
 
-  // App shell / static assets: cache-first.
+  // Navigations (the HTML): network-first, so a redeploy is picked up immediately;
+  // fall back to the cached shell only when offline.
+  if (request.mode === "navigate") {
+    e.respondWith(
+      fetch(request)
+        .then((res) => {
+          const copy = res.clone();
+          caches.open(CACHE).then((c) => c.put("/index.html", copy));
+          return res;
+        })
+        .catch(() => caches.match("/index.html"))
+    );
+    return;
+  }
+
+  // Hashed static assets (immutable): cache-first.
   e.respondWith(
     caches.match(request).then((cached) => {
       if (cached) return cached;
