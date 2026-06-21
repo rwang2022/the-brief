@@ -1091,7 +1091,40 @@ button {
   margin-left: 2px;
 }
 
+/* ===== Toast ===== */
+
+.glyph {
+  display: inline-block;
+  vertical-align: -3px;
+  color: var(--accent);
+}
+
+.toast {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px) + 22px);
+  z-index: 210;
+  background: rgba(30, 30, 32, 0.96);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 11px 20px;
+  border-radius: 999px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.3);
+  animation: fade-in 0.2s ease;
+  pointer-events: none;
+}
+
+/* Reader share button */
+.reader-share {
+  color: var(--accent);
+  display: grid;
+  place-items: center;
+}
+
 /* ===== Settings ===== */
+
 
 .settings-section {
   padding: 8px 18px 10px;

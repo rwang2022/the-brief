@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { getArticle } from "../api.js";
 import { timeAgo } from "../hooks.js";
-import { UnlockIcon, SourceIcon } from "./icons.jsx";
+import { UnlockIcon, SourceIcon, ShareIcon } from "./icons.jsx";
+import { shareArticle } from "../share.js";
 
 export default function Reader({ article, onClose, onToggleSave, isSaved, onOpenPublisher }) {
   const [state, setState] = useState({ status: "loading", data: null });
@@ -45,6 +46,14 @@ export default function Reader({ article, onClose, onToggleSave, isSaved, onOpen
             ‹ Back
           </button>
           <div className="reader-bar-actions">
+            <button
+              className="reader-share"
+              onClick={() => shareArticle({ ...article, title: data?.title || article.title })}
+              type="button"
+              aria-label="Share"
+            >
+              <ShareIcon size={20} />
+            </button>
             <button
               className={`reader-save ${isSaved ? "on" : ""}`}
               onClick={() => onToggleSave(article)}

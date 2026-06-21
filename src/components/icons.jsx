@@ -25,6 +25,15 @@ export function SourceIcon({ domain, emoji, size = 16 }) {
   );
 }
 
+export function ShareIcon({ size = 18 }) {
+  return (
+    <svg className="glyph" viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="1.9" aria-hidden="true">
+      <path d="M12 15V4m0 0L8.5 7.5M12 4l3.5 3.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M6 11.5H5.5A1.5 1.5 0 0 0 4 13v6a1.5 1.5 0 0 0 1.5 1.5h13A1.5 1.5 0 0 0 20 19v-6a1.5 1.5 0 0 0-1.5-1.5H18" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export function UnlockIcon({ size = 12 }) {
   return (
     <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="2.4" aria-hidden="true">

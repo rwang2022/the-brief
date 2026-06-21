@@ -7,7 +7,9 @@ import Publisher from "./components/Publisher.jsx";
 import Saved from "./components/Saved.jsx";
 import Settings from "./components/Settings.jsx";
 import TabBar from "./components/TabBar.jsx";
+import Toast from "./components/Toast.jsx";
 import { useLocalStorage } from "./hooks.js";
+import { parseSharedArticle } from "./share.js";
 
 export default function App() {
   const [topics, setTopics] = useLocalStorage("brief.topics", null); // null = not onboarded
@@ -17,6 +19,15 @@ export default function App() {
   const [tab, setTab] = useState("today");
   const [activeArticle, setActiveArticle] = useState(null);
   const [activePublisher, setActivePublisher] = useState(null); // domain string
+
+  // Open an article shared via link (?u=...) on first load, then tidy the URL.
+  useEffect(() => {
+    const shared = parseSharedArticle();
+    if (shared) {
+      setActiveArticle(shared);
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []);
 
   // Apply theme to <html> for CSS to react to.
   useEffect(() => {
@@ -113,6 +124,8 @@ export default function App() {
       </main>
 
       <TabBar active={tab} onChange={setTab} savedCount={saved.length} />
+
+      <Toast />
 
       {activePublisher && (
         <Publisher

@@ -40,7 +40,9 @@
       "Bash(node -e \"let s='';process.stdin.on\\('data',d=>s+=d\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(s\\);console.log\\('enabled:',j.enabled\\);for\\(const[u,sum]of Object.entries\\(j.summaries||{}\\)\\)console.log\\(' •',sum\\)}\\)\")",
       "Bash(git rm *)",
       "Bash(git add *)",
-      "Bash(git -c 'user.name=The Brief' -c user.email=strawberryai5000@gmail.com commit -q -m ' *)"
+      "Bash(git -c 'user.name=The Brief' -c user.email=strawberryai5000@gmail.com commit -q -m ' *)",
+      "Bash(RENDER_EXTERNAL_URL=https://the-brief.onrender.com timeout 3 node server/index.js)",
+      "Bash(node --input-type=module -e ' *)"
     ]
   }
 }
