@@ -54,6 +54,22 @@ npm run build      # builds the React app into dist/
 npm start          # serves dist/ + the API from :3001
 ```
 
+### Deploy (always-on, no PC required)
+
+The app is a single Node service (Express serves the built frontend + API), so any
+Node host works. Easiest is **Render** (free tier, HTTPS) — a `render.yaml` is included:
+
+1. Push this repo to GitHub.
+2. On [render.com](https://render.com): **New → Web Service** → connect the repo
+   (Render auto-detects `render.yaml`).
+3. Add your secret: **Environment → `GEMINI_API_KEY`** = your key.
+4. Deploy. You get an `https://<name>.onrender.com` URL — open it in Safari and
+   **Add to Home Screen** for the full PWA (HTTPS = offline caching works too).
+
+Set the same env vars (`GEMINI_API_KEY`, optional `GEMINI_MODEL`) on any other host
+(Railway, Fly, Vercel functions, a VPS). The free Render tier sleeps after ~15 min idle
+(≈50 s cold start); paid tiers / Railway stay warm.
+
 ## Configuration
 
 Set **one** summary provider (all optional — without any, the feed shows source snippets). See `.env.example` for the full list.
