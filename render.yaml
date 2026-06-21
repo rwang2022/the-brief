@@ -1,0 +1,17 @@
+# Render.com blueprint — deploys The Brief as a single always-on web service.
+# Render reads this automatically when you connect the repo.
+services:
+  - type: web
+    name: the-brief
+    runtime: node
+    plan: free
+    # --include=dev so Vite (a devDependency) is available to build the frontend.
+    buildCommand: npm install --include=dev && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: GEMINI_API_KEY
+        sync: false # set this secret in the Render dashboard, not in git
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash
