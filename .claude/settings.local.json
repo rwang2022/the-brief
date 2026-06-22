@@ -42,7 +42,9 @@
       "Bash(git add *)",
       "Bash(git -c 'user.name=The Brief' -c user.email=strawberryai5000@gmail.com commit -q -m ' *)",
       "Bash(RENDER_EXTERNAL_URL=https://the-brief.onrender.com timeout 3 node server/index.js)",
-      "Bash(node --input-type=module -e ' *)"
+      "Bash(node --input-type=module -e ' *)",
+      "Bash(curl -s --max-time 20 https://the-brief-qomp.onrender.com/)",
+      "Bash(curl -s --max-time 20 https://the-brief-qomp.onrender.com/sw.js)"
     ]
   }
 }

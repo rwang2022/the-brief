@@ -1,5 +1,5 @@
 // Minimal service worker: cache the app shell for offline launch, network-first for API.
-const CACHE = "the-brief-v1";
+const CACHE = "the-brief-v2";
 const SHELL = ["/", "/index.html", "/icon.svg", "/manifest.webmanifest"];
 
 self.addEventListener("install", (e) => {
