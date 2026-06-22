@@ -75,7 +75,23 @@ export default function App() {
   const isMuted = useCallback((domain) => muted.includes(domain), [muted]);
 
   if (!topics) {
-    return <Onboarding onDone={(picked) => setTopics(picked)} />;
+    // A shared link should open straight into the article — people you share with
+    // don't use the app yet, so don't force topic selection first. The reader
+    // layers over onboarding; closing it reveals onboarding to explore.
+    return (
+      <>
+        <Onboarding onDone={(picked) => setTopics(picked)} />
+        {activeArticle && (
+          <Reader
+            article={activeArticle}
+            onClose={() => setActiveArticle(null)}
+            onToggleSave={toggleSaved}
+            isSaved={isSaved(activeArticle.url)}
+          />
+        )}
+        <Toast />
+      </>
+    );
   }
 
   return (
