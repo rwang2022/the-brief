@@ -6,8 +6,6 @@ import { Cache } from "./cache.js";
 import { feedsForTopics, feedsForDomain, publisherInfo } from "./feeds.js";
 
 const parser = new Parser({
-  timeout: 10000,
-  headers: { "User-Agent": "TheBrief/1.0 (+news aggregator)" },
   customFields: {
     item: [
       ["media:content", "mediaContent", { keepArray: true }],
@@ -16,6 +14,33 @@ const parser = new Parser({
     ],
   },
 });
+
+// A desktop-browser UA + explicit redirect following — rss-parser's own parseURL
+// does NOT follow 3xx, and several publishers (Bloomberg, others) 301 their feed
+// host to www, which silently yielded zero items. We fetch the XML ourselves and
+// hand the string to the parser.
+const FEED_UA =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
+
+async function fetchFeedXml(url, timeout = 10000) {
+  const controller = new AbortController();
+  const t = setTimeout(() => controller.abort(), timeout);
+  try {
+    const res = await fetch(url, {
+      redirect: "follow",
+      signal: controller.signal,
+      headers: {
+        "User-Agent": FEED_UA,
+        Accept: "application/rss+xml, application/atom+xml, application/xml;q=0.9, text/xml;q=0.8, */*;q=0.5",
+        "Accept-Language": "en-US,en;q=0.9",
+      },
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.text();
+  } finally {
+    clearTimeout(t);
+  }
+}
 
 // Parsed-feed cache — feeds don't change more than every few minutes.
 const feedCache = new Cache({ ttl: 5 * 60 * 1000 });
@@ -97,6 +122,7 @@ function normalizeItem(item, feedMeta) {
     paywalled: Boolean(feedMeta.paywalled),
     topicId: feedMeta.topicId,
     topicLabel: feedMeta.topicLabel,
+    topicIds: feedMeta.topicIds || (feedMeta.topicId ? [feedMeta.topicId] : []),
     publishedAt: item.isoDate || item.pubDate || null,
     snippet: stripHtml(snippetSource).slice(0, 400),
     image: extractImage(item),
@@ -105,10 +131,17 @@ function normalizeItem(item, feedMeta) {
 
 async function fetchFeed(feedMeta) {
   const cached = feedCache.get(feedMeta.url);
-  if (cached) return cached.map((i) => ({ ...i, topicId: feedMeta.topicId, topicLabel: feedMeta.topicLabel }));
+  if (cached)
+    return cached.map((i) => ({
+      ...i,
+      topicId: feedMeta.topicId,
+      topicLabel: feedMeta.topicLabel,
+      topicIds: feedMeta.topicIds || [feedMeta.topicId],
+    }));
 
   try {
-    const parsed = await parser.parseURL(feedMeta.url);
+    const xml = await fetchFeedXml(feedMeta.url);
+    const parsed = await parser.parseString(xml);
     const items = (parsed.items || [])
       .filter((it) => it.title && it.link)
       .slice(0, 30)
@@ -174,12 +207,12 @@ export async function aggregatePublisher(domain) {
   return { publisher: publisherInfo(domain), articles, errors };
 }
 
-function recency(a) {
+export function recency(a) {
   return a && a.publishedAt ? Date.parse(a.publishedAt) : 0;
 }
 
 // Round-robin a pre-ordered list into key-balanced order (one per group per round).
-function interleaveBy(list, keyFn) {
+export function interleaveBy(list, keyFn) {
   const groups = new Map();
   for (const item of list) {
     const k = keyFn(item);

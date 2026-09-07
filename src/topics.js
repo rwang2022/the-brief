@@ -9,6 +9,7 @@ export const TOPIC_LABELS = {
   politics: "Politics",
   entertainment: "Entertainment",
   business: "Business",
+  markets: "Markets",
   science: "Science",
 };
 
@@ -20,5 +21,6 @@ export const TOPIC_EMOJI = {
   politics: "🏛️",
   entertainment: "🎬",
   business: "📈",
+  markets: "📊",
   science: "🔬",
 };

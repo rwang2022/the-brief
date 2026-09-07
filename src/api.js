@@ -12,9 +12,14 @@ export function getTopics() {
   return fetch("/api/topics").then(json);
 }
 
-export function getFeed(topicIds) {
+export function getFeed(topicIds, { curated = false } = {}) {
   const q = encodeURIComponent(topicIds.join(","));
-  return fetch(`/api/feed?topics=${q}`).then(json);
+  return fetch(`/api/feed?topics=${q}${curated ? "&curated=1" : ""}`).then(json);
+}
+
+export function getEdition(topicIds, n = 15) {
+  const q = encodeURIComponent(topicIds.join(","));
+  return fetch(`/api/edition?topics=${q}&n=${n}`).then(json);
 }
 
 export function getSummaries(articles) {

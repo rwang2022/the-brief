@@ -1,6 +1,8 @@
 // Minimal service worker: cache the app shell for offline launch, network-first for API.
-const CACHE = "the-brief-v2";
+const CACHE = "the-brief-v3";
 const SHELL = ["/", "/index.html", "/icon.svg", "/manifest.webmanifest"];
+// The app writes the downloaded "Edition" bundle here directly — never evict it.
+const KEEP = [CACHE, "the-brief-edition"];
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
@@ -8,7 +10,7 @@ self.addEventListener("install", (e) => {
 
 self.addEventListener("activate", (e) => {
   e.waitUntil(
-    caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim())
+    caches.keys().then((keys) => Promise.all(keys.filter((k) => !KEEP.includes(k)).map((k) => caches.delete(k)))).then(() => self.clients.claim())
   );
 });
 

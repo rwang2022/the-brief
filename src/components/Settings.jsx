@@ -16,9 +16,12 @@ export default function Settings({
   onOpenPublisher,
   muted = [],
   onToggleMute,
+  editionAuto = true,
+  onChangeEditionAuto,
 }) {
   const [allTopics, setAllTopics] = useState([]);
   const picked = new Set(topics);
+  const allOn = allTopics.length > 0 && allTopics.every((t) => picked.has(t.id));
 
   // domain -> friendly source name, from the catalog.
   const nameByDomain = {};
@@ -36,6 +39,8 @@ export default function Settings({
     if (next.size === 0) return; // keep at least one
     onChangeTopics([...next]);
   };
+
+  const selectAll = () => onChangeTopics(allTopics.map((t) => t.id));
 
   return (
     <div className="settings">
@@ -66,27 +71,57 @@ export default function Settings({
 
       <section className="settings-section">
         <h3 className="settings-label">Your topics</h3>
-        <div className="settings-topics">
+        <div className="onboarding-grid settings-chip-grid">
+          <button
+            className={`topic-chip ${allOn ? "on" : ""}`}
+            onClick={selectAll}
+            type="button"
+          >
+            <span className="topic-emoji">✨</span>
+            <span className="topic-label">All topics</span>
+            <span className="topic-check">{allOn ? "✓" : ""}</span>
+          </button>
           {allTopics.map((t) => {
             const on = picked.has(t.id);
             return (
               <button
                 key={t.id}
-                className={`topic-row ${on ? "on" : ""}`}
+                className={`topic-chip ${on ? "on" : ""}`}
                 onClick={() => toggleTopic(t.id)}
                 type="button"
               >
-                <span className="topic-row-left">
-                  <span className="topic-emoji">{t.emoji}</span>
-                  <span>{t.label}</span>
-                </span>
-                <span className={`switch ${on ? "on" : ""}`}>
-                  <span className="switch-knob" />
-                </span>
+                <span className="topic-emoji">{t.emoji}</span>
+                <span className="topic-label">{t.label}</span>
+                <span className="topic-check">{on ? "✓" : ""}</span>
               </button>
             );
           })}
         </div>
+        <p className="settings-fine" style={{ marginTop: "10px" }}>
+          Tap to follow or unfollow. Keep at least one.
+        </p>
+      </section>
+
+      <section className="settings-section">
+        <h3 className="settings-label">Edition</h3>
+        <div className="settings-topics">
+          <button
+            className="topic-row"
+            onClick={() => onChangeEditionAuto && onChangeEditionAuto(!editionAuto)}
+            type="button"
+          >
+            <span className="topic-row-left">
+              <span className="topic-emoji">📊</span>
+              <span>Auto-download each morning</span>
+            </span>
+            <span className={`switch ${editionAuto ? "on" : ""}`}>
+              <span className="switch-knob" />
+            </span>
+          </button>
+        </div>
+        <p className="settings-fine" style={{ marginTop: "8px" }}>
+          Fetch the day's 15-story Edition automatically so it's ready to read offline on your commute.
+        </p>
       </section>
 
       {muted.length > 0 && (

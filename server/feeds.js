@@ -109,9 +109,24 @@ export const TOPICS = [
       { source: "Fortune", domain: "fortune.com", url: "https://fortune.com/feed/" },
       { source: "Yahoo Finance", domain: "finance.yahoo.com", url: "https://finance.yahoo.com/news/rssindex" },
       { source: "Business Insider", domain: "businessinsider.com", url: "https://www.businessinsider.com/rss", paywalled: true },
-      { source: "Bloomberg", domain: "bloomberg.com", url: "https://feeds.bloomberg.com/markets/news.rss", paywalled: true },
+      { source: "Bloomberg", domain: "bloomberg.com", url: "https://www.bloomberg.com/feeds/markets/news.rss", paywalled: true },
       { source: "WSJ Markets", domain: "wsj.com", url: "https://feeds.a.dj.com/rss/RSSMarketsMain.xml", paywalled: true },
       { source: "NYT Business", domain: "nytimes.com", url: "https://rss.nytimes.com/services/xml/rss/nyt/Business.xml", paywalled: true },
+      { source: "Financial Times", domain: "ft.com", url: "https://www.ft.com/rss/home", paywalled: true },
+    ],
+  },
+  {
+    id: "markets",
+    label: "Markets",
+    emoji: "📊",
+    feeds: [
+      { source: "Bloomberg Markets", domain: "bloomberg.com", url: "https://www.bloomberg.com/feeds/markets/news.rss", paywalled: true },
+      { source: "Bloomberg Technology", domain: "bloomberg.com", url: "https://www.bloomberg.com/feeds/technology/news.rss", paywalled: true },
+      { source: "Bloomberg Economics", domain: "bloomberg.com", url: "https://www.bloomberg.com/feeds/economics/news.rss", paywalled: true },
+      { source: "Yahoo Finance", domain: "finance.yahoo.com", url: "https://finance.yahoo.com/news/rssindex" },
+      { source: "CNBC", domain: "cnbc.com", url: "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=10001147" },
+      { source: "MarketWatch", domain: "marketwatch.com", url: "https://feeds.content.dowjones.io/public/rss/mw_topstories" },
+      { source: "WSJ Markets", domain: "wsj.com", url: "https://feeds.a.dj.com/rss/RSSMarketsMain.xml", paywalled: true },
       { source: "Financial Times", domain: "ft.com", url: "https://www.ft.com/rss/home", paywalled: true },
     ],
   },
@@ -149,6 +164,9 @@ const PUBLISHER_NAMES = {
   "abcnews.go.com": "ABC News",
   "latimes.com": "Los Angeles Times",
   "nymag.com": "New York Magazine",
+  "bloomberg.com": "Bloomberg",
+  "finance.yahoo.com": "Yahoo Finance",
+  "cnbc.com": "CNBC",
 };
 
 // All feeds across every topic that belong to a publisher (by domain).
@@ -178,16 +196,31 @@ export function publisherInfo(domain) {
 }
 
 // Flatten the feeds for a set of topic ids, tagging each with its topic + source.
+// A feed shared by several selected topics (e.g. Bloomberg lives in both Business
+// and Markets) is fetched ONCE and carries every matching topic in `topicIds` —
+// so a per-topic filter shows it under each, instead of it being deduped away
+// under whichever topic happened to come first.
 export function feedsForTopics(topicIds) {
-  const result = [];
+  const byUrl = new Map();
   for (const id of topicIds) {
     const topic = TOPIC_BY_ID[id];
     if (!topic) continue;
     for (const feed of topic.feeds) {
-      result.push({ topicId: topic.id, topicLabel: topic.label, paywalled: false, ...feed });
+      const existing = byUrl.get(feed.url);
+      if (existing) {
+        existing.topicIds.push(topic.id);
+        continue;
+      }
+      byUrl.set(feed.url, {
+        topicId: topic.id, // primary — used for feed balancing
+        topicLabel: topic.label,
+        topicIds: [topic.id],
+        paywalled: false,
+        ...feed,
+      });
     }
   }
-  return result;
+  return [...byUrl.values()];
 }
 
 // Public-facing catalog (no feed URLs) for onboarding + the About source list.

@@ -6,6 +6,7 @@ import Reader from "./components/Reader.jsx";
 import Publisher from "./components/Publisher.jsx";
 import Saved from "./components/Saved.jsx";
 import Settings from "./components/Settings.jsx";
+import Edition from "./components/Edition.jsx";
 import TabBar from "./components/TabBar.jsx";
 import Toast from "./components/Toast.jsx";
 import { useLocalStorage } from "./hooks.js";
@@ -16,6 +17,8 @@ export default function App() {
   const [theme, setTheme] = useLocalStorage("brief.theme", "system");
   const [saved, setSaved] = useLocalStorage("brief.saved", []);
   const [muted, setMuted] = useLocalStorage("brief.muted", []); // muted publisher domains
+  const [hidden, setHidden] = useLocalStorage("brief.hidden", []); // "not interested" article urls
+  const [editionAuto, setEditionAuto] = useLocalStorage("brief.editionAuto", true);
   const [tab, setTab] = useState("today");
   const [activeArticle, setActiveArticle] = useState(null);
   const [activePublisher, setActivePublisher] = useState(null); // domain string
@@ -74,6 +77,14 @@ export default function App() {
   );
   const isMuted = useCallback((domain) => muted.includes(domain), [muted]);
 
+  const hideArticle = useCallback(
+    (url) => {
+      if (!url) return;
+      setHidden((prev) => (prev.includes(url) ? prev : [url, ...prev].slice(0, 400)));
+    },
+    [setHidden]
+  );
+
   if (!topics) {
     // A shared link should open straight into the article — people you share with
     // don't use the app yet, so don't force topic selection first. The reader
@@ -105,6 +116,18 @@ export default function App() {
             isSaved={isSaved}
             onOpenPublisher={openPublisher}
             mutedDomains={muted}
+            hiddenUrls={hidden}
+            onHideArticle={hideArticle}
+          />
+        )}
+        {tab === "edition" && (
+          <Edition
+            topics={topics}
+            onOpen={setActiveArticle}
+            onToggleSave={toggleSaved}
+            isSaved={isSaved}
+            onOpenPublisher={openPublisher}
+            auto={editionAuto}
           />
         )}
         {tab === "search" && (
@@ -115,6 +138,7 @@ export default function App() {
             isSaved={isSaved}
             onOpenPublisher={openPublisher}
             mutedDomains={muted}
+            hiddenUrls={hidden}
           />
         )}
         {tab === "saved" && (
@@ -135,6 +159,8 @@ export default function App() {
             onOpenPublisher={openPublisher}
             muted={muted}
             onToggleMute={toggleMute}
+            editionAuto={editionAuto}
+            onChangeEditionAuto={setEditionAuto}
           />
         )}
       </main>

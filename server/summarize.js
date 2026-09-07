@@ -1,223 +1,131 @@
-// One-sentence AI summaries — provider-pluggable, with FREE options.
+// One-sentence AI summaries + curator scores — one LLM call does both.
 //
-// Pick a provider via SUMMARY_PROVIDER, or it auto-detects from whatever you've
-// configured (first match wins):
-//   • gemini    — Google Gemini free tier   (GEMINI_API_KEY)   ← easiest free, no card
-//   • groq      — Groq free tier             (GROQ_API_KEY)     ← free, very fast
-//   • ollama    — local model, 100% free     (OLLAMA_MODEL / OLLAMA_HOST)
-//   • anthropic — Claude (paid, pennies)     (ANTHROPIC_API_KEY)
-//   • none      — no key set → feed falls back to RSS snippets
+// The same batched provider call that writes a story's one-sentence brief also
+// returns a newsworthiness score (0-100) and a junk flag, so the feed's curator
+// costs no extra round-trips (see server/curate.js for the no-AI heuristic layer
+// and server/index.js for how the feed uses `?curated=1`).
 //
-// All providers are asked for the same JSON shape; results are cached on disk by
-// article URL so a story is only ever summarized once.
+// Results are cached on disk by article URL — summaries in summaries.json,
+// scores in curation.json — so a story is only ever processed once.
 
-import Anthropic from "@anthropic-ai/sdk";
 import { Cache } from "./cache.js";
+import { callLLM, chunk, detectProvider } from "./llm.js";
+
+// Re-exported so existing importers (server/index.js) don't need to change.
+export { summariesConfigured, summaryProvider } from "./llm.js";
 
 const summaryCache = new Cache({ ttl: 24 * 60 * 60 * 1000, persistTo: "summaries.json" });
+const curationCache = new Cache({ ttl: 24 * 60 * 60 * 1000, persistTo: "curation.json" });
 
-const SYSTEM = `You write one-sentence summaries of news articles for a mobile news app called "The Brief".
-Rules:
-- Exactly ONE sentence, under 30 words.
-- Capture the single most important fact or development — the "so what".
-- Neutral, factual tone. No editorializing, no clickbait, no trailing ellipsis.
-- Do not start with "This article" or "The article". Lead with the news itself.`;
-
-// ---- provider selection ---------------------------------------------------
-
-// Detected lazily (on each call) from process.env — important because .env is
-// loaded after this module is imported, so we must NOT cache at import time.
-function detectProvider() {
-  const explicit = (process.env.SUMMARY_PROVIDER || "").toLowerCase();
-  if (explicit) return explicit;
-  if (process.env.GEMINI_API_KEY) return "gemini";
-  if (process.env.GROQ_API_KEY) return "groq";
-  if (process.env.OLLAMA_MODEL || process.env.OLLAMA_HOST) return "ollama";
-  if (process.env.ANTHROPIC_API_KEY) return "anthropic";
-  return "none";
-}
-
-export function summaryProvider() {
-  return detectProvider();
-}
-export function summariesConfigured() {
-  return detectProvider() !== "none";
-}
-
-// ---- per-provider callers (return raw text) -------------------------------
-
-async function fetchJson(url, options, timeout = 20000) {
-  const controller = new AbortController();
-  const t = setTimeout(() => controller.abort(), timeout);
-  try {
-    const res = await fetch(url, { ...options, signal: controller.signal });
-    if (!res.ok) throw new Error(`HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
-    return await res.json();
-  } finally {
-    clearTimeout(t);
-  }
-}
-
-let anthropicClient = null;
-
-async function callLLM(userPrompt) {
-  switch (detectProvider()) {
-    case "gemini": {
-      const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`;
-      const data = await fetchJson(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: SYSTEM }] },
-          contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-          generationConfig: { responseMimeType: "application/json", temperature: 0.2, maxOutputTokens: 1024 },
-        }),
-      });
-      return data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-    }
-    case "groq": {
-      const model = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
-      const data = await fetchJson("https://api.groq.com/openai/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
-        },
-        body: JSON.stringify({
-          model,
-          messages: [
-            { role: "system", content: SYSTEM },
-            { role: "user", content: userPrompt },
-          ],
-          response_format: { type: "json_object" },
-          temperature: 0.2,
-          max_tokens: 1024,
-        }),
-      });
-      return data?.choices?.[0]?.message?.content || "";
-    }
-    case "ollama": {
-      const host = process.env.OLLAMA_HOST || "http://localhost:11434";
-      const model = process.env.OLLAMA_MODEL || "llama3.2";
-      const data = await fetchJson(
-        `${host.replace(/\/$/, "")}/api/chat`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            model,
-            messages: [
-              { role: "system", content: SYSTEM },
-              { role: "user", content: userPrompt },
-            ],
-            format: "json",
-            stream: false,
-            options: { temperature: 0.2 },
-          }),
-        },
-        60000 // local models can be slower
-      );
-      return data?.message?.content || "";
-    }
-    case "anthropic": {
-      if (!anthropicClient) anthropicClient = new Anthropic();
-      const res = await anthropicClient.messages.create({
-        model: process.env.BRIEF_MODEL || "claude-haiku-4-5",
-        max_tokens: 1024,
-        system: SYSTEM,
-        messages: [{ role: "user", content: userPrompt }],
-      });
-      return res.content.find((b) => b.type === "text")?.text || "";
-    }
-    default:
-      return "";
-  }
-}
+const SYSTEM = `You are the editor of a mobile news app called "The Brief". For each article you receive a headline, source and a short context snippet. Return, per article:
+- "summary": exactly ONE sentence, under 30 words, capturing the single most important fact — the "so what". Neutral and factual: no editorializing, no clickbait, no trailing ellipsis. Do not start with "This article" or "The article"; lead with the news.
+- "score": an integer 0-100 for how newsworthy and substantive this is for a general reader. High (70-100): consequential reporting on world/national events, politics, business, science, notable culture. Medium (40-69): solid but narrower stories. Low (0-39): thin aggregation, celebrity gossip, opinion/hot-takes, service pieces, listicles.
+- "junk": true if this is NOT real news — sponsored/affiliate content, product-deal roundups, coupon posts, horoscopes, "Wordle answer", pure PR, or SEO filler. Otherwise false.`;
 
 // ---- batching + parsing ---------------------------------------------------
 
-function chunk(arr, size) {
-  const out = [];
-  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
-  return out;
-}
-
 // Lenient JSON extraction — strips code fences and tolerates {summaries:[...]} or a bare array.
-function parseSummaries(text, batch) {
-  const out = {};
-  if (!text) return out;
+function parseBatch(text, batch) {
+  const summaries = {};
+  const curation = {};
+  if (!text) return { summaries, curation };
   let cleaned = text.trim().replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
   let parsed;
   try {
     parsed = JSON.parse(cleaned);
   } catch {
     const m = cleaned.match(/[[{][\s\S]*[\]}]/);
-    if (!m) return out;
+    if (!m) return { summaries, curation };
     try {
       parsed = JSON.parse(m[0]);
     } catch {
-      return out;
+      return { summaries, curation };
     }
   }
-  const list = Array.isArray(parsed) ? parsed : parsed.summaries || parsed.results || [];
+  const list = Array.isArray(parsed) ? parsed : parsed.summaries || parsed.results || parsed.articles || [];
   for (const item of list) {
     if (!item) continue;
     const idx = typeof item.index === "number" ? item.index : list.indexOf(item);
     const article = batch[idx];
+    if (!article) continue;
     const summary = (item.summary || item.text || "").trim();
-    if (article && summary) out[article.url] = summary;
+    if (summary) summaries[article.url] = summary;
+    const score = clampScore(item.score);
+    const junk = item.junk === true || item.junk === "true";
+    if (score !== null || junk) curation[article.url] = { score: score ?? 50, junk };
   }
-  return out;
+  return { summaries, curation };
 }
 
-async function summarizeBatch(batch) {
+function clampScore(v) {
+  const n = typeof v === "number" ? v : parseInt(v, 10);
+  if (Number.isNaN(n)) return null;
+  return Math.max(0, Math.min(100, Math.round(n)));
+}
+
+async function processBatch(batch) {
   const payload = batch
     .map((a, i) => `[${i}] HEADLINE: ${a.title}\nSOURCE: ${a.source}\nCONTEXT: ${(a.snippet || "").slice(0, 280)}`)
     .join("\n\n");
 
-  const prompt = `Summarize each of these ${batch.length} articles in one sentence.
-Return ONLY JSON of the form {"summaries":[{"index":0,"summary":"..."}]}, with one entry per index.
+  const prompt = `Process each of these ${batch.length} articles.
+Return ONLY JSON of the form {"summaries":[{"index":0,"summary":"...","score":0,"junk":false}]}, with one entry per index.
 
 ${payload}`;
 
   try {
-    const text = await callLLM(prompt);
-    return parseSummaries(text, batch);
+    const text = await callLLM(prompt, SYSTEM);
+    return parseBatch(text, batch);
   } catch (err) {
     console.warn(`[summarize] ${detectProvider()} batch failed:`, err.message);
-    return {};
+    return { summaries: {}, curation: {} };
   }
 }
 
 /**
- * Summarize a list of articles, using the cache where possible.
+ * Summarize + score a list of articles, using the caches where possible.
  * @param {{url:string,title:string,source:string,snippet?:string}[]} articles
- * @returns {Promise<Record<string,string>>}  url -> summary
+ * @returns {Promise<{summaries: Record<string,string>, curation: Record<string,{score:number,junk:boolean}>}>}
  */
-export async function summarize(articles) {
-  const result = {};
+export async function summarizeAndScore(articles) {
+  const summaries = {};
+  const curation = {};
   const todo = [];
 
   for (const a of articles) {
     if (!a?.url || !a?.title) continue;
-    const cached = summaryCache.get(a.url);
-    if (cached) result[a.url] = cached;
-    else todo.push(a);
+    const cachedSummary = summaryCache.get(a.url);
+    const cachedCuration = curationCache.get(a.url);
+    if (cachedSummary) summaries[a.url] = cachedSummary;
+    if (cachedCuration) curation[a.url] = cachedCuration;
+    if (!cachedSummary || !cachedCuration) todo.push(a);
   }
 
-  if (todo.length === 0 || detectProvider() === "none") return result;
+  if (todo.length === 0 || detectProvider() === "none") return { summaries, curation };
 
   const batches = chunk(todo, 8);
-  const settled = await Promise.allSettled(batches.map(summarizeBatch));
+  const settled = await Promise.allSettled(batches.map(processBatch));
 
   for (const s of settled) {
     if (s.status !== "fulfilled") continue;
-    for (const [url, summary] of Object.entries(s.value)) {
-      result[url] = summary;
+    for (const [url, summary] of Object.entries(s.value.summaries)) {
+      summaries[url] = summary;
       summaryCache.set(url, summary);
+    }
+    for (const [url, c] of Object.entries(s.value.curation)) {
+      curation[url] = c;
+      curationCache.set(url, c);
     }
   }
 
-  return result;
+  return { summaries, curation };
+}
+
+/**
+ * Summaries only — thin wrapper for callers that don't need curator scores.
+ * @returns {Promise<Record<string,string>>}  url -> summary
+ */
+export async function summarize(articles) {
+  const { summaries } = await summarizeAndScore(articles);
+  return summaries;
 }

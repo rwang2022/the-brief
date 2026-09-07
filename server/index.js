@@ -15,7 +15,9 @@ import compression from "compression";
 
 import { TOPICS, topicCatalog } from "./feeds.js";
 import { aggregate, aggregatePublisher } from "./aggregate.js";
-import { summarize, summariesConfigured, summaryProvider } from "./summarize.js";
+import { summarize, summarizeAndScore, summariesConfigured, summaryProvider } from "./summarize.js";
+import { curateHeuristic } from "./curate.js";
+import { buildEdition } from "./edition.js";
 import { getReader } from "./reader.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -61,8 +63,20 @@ app.get("/api/feed", async (req, res) => {
     return res.status(400).json({ error: "Provide at least one topic, e.g. ?topics=tech,world" });
   }
 
+  // ?curated=1 → run the no-AI curator layer (junk drop + dedupe + gentle
+  // re-order). Still no LLM call here; AI scores refine it client-side as
+  // summaries stream in.
+  const curated = ["1", "true", "yes"].includes(String(req.query.curated || "").toLowerCase());
+
   try {
-    const { articles, errors } = await aggregate(topics);
+    const { articles: raw, errors } = await aggregate(topics);
+    let articles = raw;
+    let hidden = 0;
+    if (curated) {
+      const c = curateHeuristic(raw);
+      articles = c.articles;
+      hidden = c.hidden;
+    }
 
     // The feed loads fast with no AI calls; the client lazily requests summaries
     // for visible cards via POST /api/summarize (cached server-side).
@@ -70,6 +84,8 @@ app.get("/api/feed", async (req, res) => {
       articles,
       count: articles.length,
       feedErrors: errors,
+      curated,
+      hidden,
       summariesEnabled: summariesConfigured(),
       generatedAt: new Date().toISOString(),
     });
@@ -95,14 +111,33 @@ app.get("/api/publisher", async (req, res) => {
 
 app.post("/api/summarize", async (req, res) => {
   const articles = Array.isArray(req.body?.articles) ? req.body.articles : [];
-  if (articles.length === 0) return res.json({ summaries: {} });
+  if (articles.length === 0) return res.json({ summaries: {}, curation: {} });
   try {
-    // Cap per request to keep latency and cost bounded.
-    const summaries = await summarize(articles.slice(0, 40));
-    res.json({ summaries, enabled: summariesConfigured() });
+    // Cap per request to keep latency and cost bounded. One call returns both the
+    // one-sentence brief and the curator score/junk flag per article.
+    const { summaries, curation } = await summarizeAndScore(articles.slice(0, 40));
+    res.json({ summaries, curation, enabled: summariesConfigured() });
   } catch (err) {
     console.error("[summarize] error:", err);
     res.status(500).json({ error: "Failed to summarize." });
+  }
+});
+
+app.get("/api/edition", async (req, res) => {
+  const topics = String(req.query.topics || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (topics.length === 0) {
+    return res.status(400).json({ error: "Provide at least one topic, e.g. ?topics=world,markets" });
+  }
+  const n = Math.max(5, Math.min(25, parseInt(req.query.n, 10) || 15));
+  try {
+    const edition = await buildEdition(topics, n);
+    res.json(edition);
+  } catch (err) {
+    console.error("[edition] error:", err);
+    res.status(500).json({ error: "Failed to build the edition." });
   }
 });
 

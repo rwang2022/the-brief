@@ -6,8 +6,11 @@ A mobile-first, iOS-style news aggregator. Pick your topics, get the day's headl
 
 ## Features
 
-- **Topic onboarding** — choose from NYC Local, Sports, Tech, World, Politics, Entertainment, Business, Science.
-- **Aggregated feed** — headlines merged across ~45 sources (free outlets *and* premium ones: NYT, WSJ, WaPo, The Economist, FT, Wired, MIT Tech Review…), deduped and sorted newest-first.
+- **Topic onboarding** — choose from NYC Local, Sports, Tech, World, Politics, Entertainment, Business, **Markets**, Science — or **Follow everything** in one tap. Change picks any time from a compact chip picker in Settings (no more one-switch-per-topic).
+- **Markets** — a dedicated finance section: Bloomberg (Markets / Technology / Economics), Yahoo Finance, CNBC, MarketWatch, WSJ Markets, FT. A feed shared with Business shows up under both.
+- **Aggregated feed** — headlines merged across ~50 sources (free outlets *and* premium ones: NYT, WSJ, WaPo, The Economist, FT, Bloomberg, Wired, MIT Tech Review…), deduped and sorted newest-first.
+- **Curated vs. Latest** — the feed opens **Curated**: an AI curator hides low-signal noise (sponsored posts, affiliate deal roundups, horoscopes, "Wordle answer", SEO filler) and near-duplicate wire copy, then blends recency with a newsworthiness score. One tap flips to **Latest** — the raw newest-first firehose. "Not interested" (✕ on a card) hides a story for good.
+- **The Edition** — a tab that downloads a balanced **15 stories for your commute**: curated, spread across your topics, with the full article text baked in so it reads with **no signal on the train**. Auto-refreshes each morning (toggle in Settings) or download on demand.
 - **Unlock badge** — articles from paywalled publishers carry an **Unlock** badge in the feed, an at-a-glance signal of what the app opens up for you.
 - **Publisher pages** — tap any source name/favicon (in the feed, reader, or Settings) to open that outlet's "homepage" — every story from them across all sections, newest-first.
 - **AI summaries** — one neutral sentence per story, with **free providers** (Google Gemini, Groq, or local Ollama) or paid Claude — auto-detected from your config, batched + cached. Optional — falls back to source snippets with no key.
@@ -21,11 +24,16 @@ A mobile-first, iOS-style news aggregator. Pick your topics, get the day's headl
 
 ```
 React (Vite, :5173)  ──/api proxy──▶  Express backend (:3001)
-  onboarding / feed / reader               ├─ aggregate.js  RSS fetch + parse + merge
-  bottom tabs / dark mode                  ├─ summarize.js  Claude one-sentence summaries (batched, cached)
+  onboarding / feed / reader               ├─ aggregate.js  RSS fetch (follows redirects) + parse + merge
+  Edition (offline top-15)                 ├─ llm.js        provider selection + one callLLM()
+  bottom tabs / dark mode                  ├─ summarize.js  one-sentence summary + curator score (batched, cached)
+                                           ├─ curate.js     no-AI junk / near-dupe filter (runs on every feed)
+                                           ├─ edition.js    aggregate → curate → score → balance → prefetch readers
                                            ├─ reader.js     Readability + paywall fallback chain
                                            └─ cache.js      TTL cache (disk-persisted)
 ```
+
+The AI curator adds **no latency** to the feed: `/api/feed?curated=1` only runs the synchronous `curate.js` layer, and the newsworthiness score rides the same batched `/api/summarize` call that was already fetching one-sentence briefs. The client hides `junk || score < 25` as scores stream in.
 
 A small backend is required because: RSS feeds and the bypass proxies can't be fetched from the browser (CORS), and the Claude API key must stay server-side.
 
@@ -88,15 +96,16 @@ Set **one** summary provider (all optional — without any, the feed shows sourc
 | Endpoint                          | Description                                              |
 | --------------------------------- | ------------------------------------------------------- |
 | `GET /api/topics`                 | Topic catalog for onboarding.                           |
-| `GET /api/feed?topics=tech,world` | Merged, sorted articles for the chosen topics.          |
-| `POST /api/summarize`             | `{ articles: [...] }` → `{ url: summary }` (cached).     |
+| `GET /api/feed?topics=tech,world` | Merged, sorted articles. Add `&curated=1` for the junk/dupe-filtered, re-ranked feed. |
+| `POST /api/summarize`             | `{ articles: [...] }` → `{ summaries: {url: text}, curation: {url: {score, junk}} }` (cached). |
+| `GET /api/edition?topics=…&n=15`  | Balanced daily top-N with clean reader text baked in, for offline reading (cached 12h). |
 | `GET /api/article?url=...`        | Clean reader-mode content, with paywall bypass.         |
 | `GET /api/publisher?domain=...`   | All articles from one publisher across every section.   |
 | `GET /api/health`                 | Status + whether summaries are configured.              |
 
 ## Customizing sources
 
-Topics and their RSS feeds live in [`server/feeds.js`](server/feeds.js) — add a feed by dropping a `{ source, url }` into any topic's `feeds` array (and mirror the label/emoji in [`src/topics.js`](src/topics.js)).
+Topics and their RSS feeds live in [`server/feeds.js`](server/feeds.js) — add a feed by dropping a `{ source, domain, url, paywalled? }` into any topic's `feeds` array (and mirror the label/emoji in [`src/topics.js`](src/topics.js)). The same feed can live in several topics — it's fetched once and tagged with every matching topic, so a per-topic filter shows it under each. Feed fetching follows redirects, so `feeds.host` URLs that 301 to `www.` work fine.
 
 ## A note on paywalls
 

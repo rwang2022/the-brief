@@ -8,11 +8,13 @@ export default function ArticleCard({
   index,
   summary,
   summariesEnabled,
+  collapsing = false,
   onOpen,
   onToggleSave,
   saved,
   onVisible,
   onOpenPublisher,
+  onHide,
 }) {
   const ref = useRef(null);
   const firedRef = useRef(false);
@@ -42,7 +44,11 @@ export default function ArticleCard({
   const showSpinner = summariesEnabled && !summary;
 
   return (
-    <article className="card" ref={ref} onClick={() => onOpen(article)}>
+    <article
+      className={`card ${collapsing ? "collapsing" : ""}`}
+      ref={ref}
+      onClick={() => onOpen(article)}
+    >
       <div className="card-body">
         <div className="card-meta">
           <span
@@ -84,6 +90,21 @@ export default function ArticleCard({
         <div className="card-thumb">
           <img src={article.image} alt="" loading="lazy" onError={() => setImgOk(false)} />
         </div>
+      )}
+
+      {onHide && (
+        <button
+          className="card-hide"
+          aria-label="Not interested"
+          title="Not interested — hide this story"
+          onClick={(e) => {
+            e.stopPropagation();
+            onHide(article.url);
+          }}
+          type="button"
+        >
+          ✕
+        </button>
       )}
 
       <button

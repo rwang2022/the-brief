@@ -205,6 +205,24 @@ button {
   opacity: 0.4;
 }
 
+.ghost-btn {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+  background: transparent;
+  color: var(--text-2);
+  font-weight: 600;
+  font-size: 15px;
+  padding: 12px;
+  border-radius: 12px;
+  text-align: center;
+  transition: opacity 0.15s ease;
+}
+
+.ghost-btn:disabled {
+  opacity: 0.35;
+}
+
 /* ===== Feed ===== */
 
 .feed,
@@ -1283,4 +1301,199 @@ button {
 
 .source-chip.paywalled .source-favicon {
   outline: 1.5px solid var(--accent-soft);
+}
+
+/* ===== Feed: curated / latest toggle + hidden note ===== */
+
+.feed-mode {
+  display: inline-flex;
+  align-self: flex-start;
+  background: var(--card);
+  border-radius: 999px;
+  padding: 3px;
+  box-shadow: var(--shadow);
+  gap: 2px;
+  margin-top: 12px;
+}
+
+.feed-mode button {
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.feed-mode button.on {
+  background: var(--accent);
+  color: #fff;
+}
+
+.feed-hidden-note {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px;
+  margin: 2px 0 8px;
+  font-size: 13px;
+  color: var(--text-3);
+}
+
+.feed-hidden-note button {
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 13px;
+}
+
+/* A card being curated out — collapse smoothly rather than pop. */
+.card.collapsing {
+  overflow: hidden;
+  animation: card-collapse 0.32s ease forwards;
+  pointer-events: none;
+}
+
+@keyframes card-collapse {
+  to {
+    opacity: 0;
+    max-height: 0;
+    margin: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    transform: scale(0.96);
+  }
+}
+
+.card-hide {
+  position: absolute;
+  top: 10px;
+  right: 44px;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-3);
+  font-size: 15px;
+  opacity: 0.6;
+  transition: opacity 0.15s ease, transform 0.12s ease;
+}
+
+.card-hide:active {
+  transform: scale(0.9);
+  opacity: 1;
+}
+
+.settings-chip-grid {
+  margin-top: 2px;
+}
+
+/* ===== Edition ===== */
+
+.edition-empty {
+  text-align: center;
+  padding: 40px 20px;
+}
+
+.edition-empty .empty-emoji {
+  font-size: 44px;
+  margin-bottom: 12px;
+}
+
+.edition-empty h2 {
+  font-size: 20px;
+  font-weight: 800;
+  margin: 0 0 6px;
+}
+
+.edition-empty p {
+  color: var(--text-2);
+  font-size: 15px;
+  line-height: 1.5;
+  margin: 0 auto 20px;
+  max-width: 300px;
+}
+
+.edition-progress {
+  color: var(--text-3);
+  font-size: 14px;
+  margin-top: 14px;
+}
+
+.edition-list {
+  padding: 4px 0 24px;
+}
+
+.edition-item {
+  display: flex;
+  gap: 14px;
+  width: 100%;
+  text-align: left;
+  padding: 16px 4px;
+  border-bottom: 0.5px solid var(--separator);
+}
+
+.edition-item:active {
+  background: var(--accent-soft);
+}
+
+.edition-num {
+  flex: 0 0 auto;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--accent);
+  width: 22px;
+  text-align: right;
+  padding-top: 1px;
+}
+
+.edition-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.edition-item .card-meta {
+  margin-bottom: 4px;
+}
+
+.edition-item h3 {
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.32;
+  margin: 0 0 4px;
+}
+
+.edition-item p {
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--text-2);
+  margin: 0;
+}
+
+.edition-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 4px;
+  font-size: 13px;
+  color: var(--text-3);
+}
+
+.edition-foot button {
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.edition-offline-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
 }

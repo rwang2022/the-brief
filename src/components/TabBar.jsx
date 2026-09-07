@@ -1,6 +1,7 @@
 export default function TabBar({ active, onChange, savedCount }) {
   const tabs = [
     { id: "today", label: "Today", icon: TodayIcon },
+    { id: "edition", label: "Edition", icon: EditionIcon },
     { id: "search", label: "Search", icon: SearchIcon },
     { id: "saved", label: "Saved", icon: SavedIcon, badge: savedCount },
     { id: "settings", label: "Settings", icon: SettingsIcon },
@@ -37,6 +38,17 @@ function TodayIcon({ active }) {
       <line x1="3" y1="9" x2="21" y2="9" />
       <line x1="8" y1="2.5" x2="8" y2="5.5" />
       <line x1="16" y1="2.5" x2="16" y2="5.5" />
+    </svg>
+  );
+}
+
+function EditionIcon({ active }) {
+  return (
+    <svg viewBox="0 0 24 24" width="24" height="24" fill={active ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.8">
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <line x1="7" y1="9" x2="12" y2="9" stroke={active ? "var(--card)" : "currentColor"} />
+      <line x1="7" y1="12.5" x2="17" y2="12.5" stroke={active ? "var(--card)" : "currentColor"} />
+      <line x1="7" y1="15.5" x2="17" y2="15.5" stroke={active ? "var(--card)" : "currentColor"} />
     </svg>
   );
 }

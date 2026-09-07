@@ -66,6 +66,14 @@ export default function Onboarding({ onDone }) {
         >
           {picked.size === 0 ? "Select at least one" : `Continue with ${picked.size}`}
         </button>
+        <button
+          className="ghost-btn"
+          disabled={loading || topics.length === 0}
+          onClick={() => onDone(topics.map((t) => t.id))}
+          type="button"
+        >
+          Follow everything
+        </button>
       </div>
     </div>
   );

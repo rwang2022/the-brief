@@ -6,7 +6,7 @@
   "description": "The Brief — a mobile-first news aggregator with AI summaries and reader mode.",
   "scripts": {
     "dev": "concurrently -n server,web -c blue,magenta \"npm:dev:server\" \"npm:dev:web\"",
-    "dev:server": "node --watch server/index.js",
+    "dev:server": "node --watch server/dev.js",
     "dev:web": "vite",
     "build": "vite build",
     "preview": "vite preview",

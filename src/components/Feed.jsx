@@ -1,28 +1,46 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getFeed, getSummaries } from "../api.js";
 import { TOPIC_LABELS } from "../topics.js";
+import { useLocalStorage } from "../hooks.js";
 import ArticleCard from "./ArticleCard.jsx";
 import { useVisibilityRefresh } from "../hooks.js";
 
 const REFRESH_MS = 10 * 60 * 1000; // auto-refresh throughout the day
+const LOW_SCORE = 25; // AI curator score below which a story is treated as low-signal
 
-export default function Feed({ topics, onOpen, onToggleSave, isSaved, onOpenPublisher, mutedDomains = [] }) {
+export default function Feed({
+  topics,
+  onOpen,
+  onToggleSave,
+  isSaved,
+  onOpenPublisher,
+  mutedDomains = [],
+  hiddenUrls = [],
+  onHideArticle,
+}) {
   const [articles, setArticles] = useState([]);
   const [summaries, setSummaries] = useState({});
+  const [curation, setCuration] = useState({}); // url -> { score, junk }
+  const [collapsing, setCollapsing] = useState(() => new Set()); // urls mid-collapse
+  const [serverHidden, setServerHidden] = useState(0);
   const [status, setStatus] = useState("loading"); // loading | ready | error
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState("all");
+  const [mode, setMode] = useLocalStorage("brief.feedMode", "curated"); // curated | latest
   const [summariesEnabled, setSummariesEnabled] = useState(true);
   const [generatedAt, setGeneratedAt] = useState(null);
   const summarizing = useRef(new Set());
+
+  const curated = mode === "curated";
 
   const load = useCallback(
     async ({ silent = false } = {}) => {
       if (!silent) setStatus((s) => (s === "ready" ? s : "loading"));
       setRefreshing(true);
       try {
-        const data = await getFeed(topics);
+        const data = await getFeed(topics, { curated });
         setArticles(data.articles);
+        setServerHidden(data.hidden || 0);
         setSummariesEnabled(data.summariesEnabled);
         setGeneratedAt(data.generatedAt);
         setStatus("ready");
@@ -32,7 +50,7 @@ export default function Feed({ topics, onOpen, onToggleSave, isSaved, onOpenPubl
         setRefreshing(false);
       }
     },
-    [topics]
+    [topics, curated]
   );
 
   useEffect(() => {
@@ -46,49 +64,82 @@ export default function Feed({ topics, onOpen, onToggleSave, isSaved, onOpenPubl
   }, [load]);
   useVisibilityRefresh(() => load({ silent: true }), true);
 
-  const visible = useMemo(() => {
+  const isLowSignal = useCallback(
+    (url) => {
+      const c = curation[url];
+      return Boolean(c && (c.junk || (typeof c.score === "number" && c.score < LOW_SCORE)));
+    },
+    [curation]
+  );
+
+  // Everything that passes the local filters (mute / hidden / topic pill).
+  const baseVisible = useMemo(() => {
     const muted = new Set(mutedDomains);
-    const live = articles.filter((a) => !muted.has(a.domain));
-    // "All" uses the server's balanced topic/source interleave; a specific topic
-    // filter shows that topic strictly newest-first.
+    const hidden = new Set(hiddenUrls);
+    const live = articles.filter((a) => !muted.has(a.domain) && !hidden.has(a.url));
     if (filter === "all") return live;
     return live
-      .filter((a) => a.topicId === filter)
+      .filter((a) => (a.topicIds || [a.topicId]).includes(filter))
       .sort((a, b) => (Date.parse(b.publishedAt) || 0) - (Date.parse(a.publishedAt) || 0));
-  }, [articles, filter, mutedDomains]);
+  }, [articles, filter, mutedDomains, hiddenUrls]);
 
-  // Lazily fetch summaries for articles that don't have one yet, in small waves.
+  // In curated mode, low-signal stories drop out (kept briefly while they collapse).
+  const visible = useMemo(() => {
+    if (!curated) return baseVisible;
+    return baseVisible.filter((a) => !isLowSignal(a.url) || collapsing.has(a.url));
+  }, [baseVisible, curated, isLowSignal, collapsing]);
+
+  const aiHiddenCount = useMemo(
+    () => (curated ? baseVisible.filter((a) => isLowSignal(a.url) && !collapsing.has(a.url)).length : 0),
+    [baseVisible, curated, isLowSignal, collapsing]
+  );
+  const hiddenNote = serverHidden + aiHiddenCount;
+
+  // Drive the collapse animation for stories the curator just flagged.
+  useEffect(() => {
+    if (!curated) return;
+    const newlyLow = baseVisible
+      .filter((a) => isLowSignal(a.url) && !collapsing.has(a.url))
+      .map((a) => a.url);
+    if (newlyLow.length === 0) return;
+    setCollapsing((prev) => new Set([...prev, ...newlyLow]));
+    const t = setTimeout(() => setCollapsing(new Set()), 360);
+    return () => clearTimeout(t);
+  }, [curation, curated, baseVisible, isLowSignal, collapsing]);
+
+  // Lazily fetch summaries (+ curator scores) for articles not yet processed.
   const requestSummaries = useCallback(
     async (batch) => {
       const need = batch.filter(
-        (a) => a && !summaries[a.url] && !summarizing.current.has(a.url)
+        (a) => a && !summaries[a.url] && !curation[a.url] && !summarizing.current.has(a.url)
       );
       if (need.length === 0 || !summariesEnabled) return;
       need.forEach((a) => summarizing.current.add(a.url));
       try {
-        const { summaries: got, enabled } = await getSummaries(need);
+        const { summaries: got, curation: gotCuration, enabled } = await getSummaries(need);
         if (enabled === false) setSummariesEnabled(false);
         if (got && Object.keys(got).length) setSummaries((prev) => ({ ...prev, ...got }));
+        if (gotCuration && Object.keys(gotCuration).length)
+          setCuration((prev) => ({ ...prev, ...gotCuration }));
       } catch {
         /* leave snippet fallback in place */
       } finally {
         need.forEach((a) => summarizing.current.delete(a.url));
       }
     },
-    [summaries, summariesEnabled]
+    [summaries, curation, summariesEnabled]
   );
 
-  // Kick off summary generation for the first screenful as soon as the feed loads.
+  // Kick off processing for the first screenful as soon as the feed loads.
   useEffect(() => {
-    if (status === "ready" && visible.length) {
-      requestSummaries(visible.slice(0, 12));
+    if (status === "ready" && baseVisible.length) {
+      requestSummaries(baseVisible.slice(0, 12));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, visible.length, filter]);
+  }, [status, baseVisible.length, filter, mode]);
 
   const onCardVisible = useCallback(
     (article, index) => {
-      // When a card scrolls into view, summarize it and the next few.
       const slice = visible.slice(index, index + 6);
       requestSummaries(slice);
     },
@@ -110,6 +161,25 @@ export default function Feed({ topics, onOpen, onToggleSave, isSaved, onOpenPubl
             type="button"
           >
             ↻
+          </button>
+        </div>
+
+        <div className="feed-mode" role="tablist" aria-label="Feed mode">
+          <button
+            className={curated ? "on" : ""}
+            onClick={() => setMode("curated")}
+            type="button"
+            role="tab"
+          >
+            Curated
+          </button>
+          <button
+            className={!curated ? "on" : ""}
+            onClick={() => setMode("latest")}
+            type="button"
+            role="tab"
+          >
+            Latest
           </button>
         </div>
 
@@ -145,6 +215,16 @@ export default function Feed({ topics, onOpen, onToggleSave, isSaved, onOpenPubl
 
       {status === "ready" && (
         <div className="feed-list">
+          {curated && hiddenNote > 0 && (
+            <div className="feed-hidden-note">
+              <span>
+                {hiddenNote} low-signal {hiddenNote === 1 ? "story" : "stories"} hidden
+              </span>
+              <button type="button" onClick={() => setMode("latest")}>
+                Show all
+              </button>
+            </div>
+          )}
           {visible.map((article, i) => (
             <ArticleCard
               key={article.url || article.id}
@@ -152,11 +232,13 @@ export default function Feed({ topics, onOpen, onToggleSave, isSaved, onOpenPubl
               index={i}
               summary={summaries[article.url]}
               summariesEnabled={summariesEnabled}
+              collapsing={collapsing.has(article.url)}
               onOpen={onOpen}
               onToggleSave={onToggleSave}
               saved={isSaved(article.url)}
               onVisible={onCardVisible}
               onOpenPublisher={onOpenPublisher}
+              onHide={onHideArticle}
             />
           ))}
           {generatedAt && (

@@ -10,6 +10,17 @@ export default function Reader({ article, onClose, onToggleSave, isSaved, onOpen
 
   useEffect(() => {
     let alive = true;
+    // Edition stories arrive with their clean text already baked in — render it
+    // straight away so the reader works with no network (on the train).
+    if (article.reader && article.reader.content) {
+      setState({
+        status: "ready",
+        data: { ok: true, ...article.reader, title: article.reader.title || article.title },
+      });
+      return () => {
+        alive = false;
+      };
+    }
     setState({ status: "loading", data: null });
     getArticle(article.url)
       .then((data) => {

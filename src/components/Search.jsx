@@ -2,7 +2,15 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { getFeed } from "../api.js";
 import ArticleCard from "./ArticleCard.jsx";
 
-export default function Search({ topics, onOpen, onToggleSave, isSaved, onOpenPublisher, mutedDomains = [] }) {
+export default function Search({
+  topics,
+  onOpen,
+  onToggleSave,
+  isSaved,
+  onOpenPublisher,
+  mutedDomains = [],
+  hiddenUrls = [],
+}) {
   const [pool, setPool] = useState([]);
   const [status, setStatus] = useState("loading");
   const [query, setQuery] = useState("");
@@ -32,9 +40,10 @@ export default function Search({ topics, onOpen, onToggleSave, isSaved, onOpenPu
     const q = query.trim().toLowerCase();
     if (!q) return [];
     const muted = new Set(mutedDomains);
+    const hidden = new Set(hiddenUrls);
     const terms = q.split(/\s+/);
     return pool
-      .filter((a) => !muted.has(a.domain))
+      .filter((a) => !muted.has(a.domain) && !hidden.has(a.url))
       .map((a) => {
         const haystack = `${a.title} ${a.snippet} ${a.source} ${a.topicLabel}`.toLowerCase();
         // Every term must appear; title hits rank higher.
@@ -46,7 +55,7 @@ export default function Search({ topics, onOpen, onToggleSave, isSaved, onOpenPu
       .filter(Boolean)
       .sort((x, y) => y.score - x.score)
       .map((x) => x.a);
-  }, [query, pool, mutedDomains]);
+  }, [query, pool, mutedDomains, hiddenUrls]);
 
   return (
     <div className="feed">
