@@ -285,14 +285,23 @@ button {
 
 .topic-filter {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
-  overflow-x: auto;
   padding: 12px 0 4px;
-  scrollbar-width: none;
 }
 
-.topic-filter::-webkit-scrollbar {
-  display: none;
+/* On a touch phone, keep it to one swipeable row to save vertical space.
+   On desktop (no swipe) and tablets, the pills wrap so every topic is reachable. */
+@media (hover: none) and (pointer: coarse) and (max-width: 600px) {
+  .topic-filter {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .topic-filter::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 .filter-pill {
